@@ -30,8 +30,7 @@ signal directions, functional roles, and handshake behavior.
 
 #### A) Host Command Interface
 
-The host interface provides a **simple request–response protocol** between a host
-processor/testbench and the SDRAM controller.
+The host interface provides a **simple request–response protocol** between a processor and the SDRAM controller.
 
 ##### Command Channel (Host → Controller)
 
@@ -39,11 +38,11 @@ processor/testbench and the SDRAM controller.
 |------|------:|:---------:|-------------|
 | `cmd_valid` | 1 | In | Asserted by the host to indicate a valid memory command. |
 | `cmd_write` | 1 | In | Command type: `1` = WRITE, `0` = READ. |
-| `cmd_addr`  | `ROW_BITS+COL_BITS+BANK_BITS` | In | Linear memory address, internally decoded into **bank**, **row**, and **column** fields. |
+| `cmd_addr`  | 24 | In | Linear memory address, internally decoded into **bank**, **row**, and **column** fields. |
 | `cmd_wdata` | 16 | In | Write data for WRITE commands. |
 | `cmd_ready` | 1 | Out | Indicates that the controller can accept a new command in the current cycle. |
 
-**Handshake rule**
+***Handshake rule***
 - A command is accepted when **`cmd_valid && cmd_ready`** is high on a rising clock edge.
 - Commands are accepted **only in the `IDLE` state** and when no refresh operation is pending.
 - Input signals are internally registered to avoid race conditions between host and controller.
@@ -57,7 +56,7 @@ processor/testbench and the SDRAM controller.
 | `rsp_rdata` | 16 | Out | Read data returned from SDRAM. |
 | `rsp_ready` | 1 | In | Asserted by the host to accept the read response (backpressure support). |
 
-**Response behavior**
+***Response behavior***
 - `rsp_valid` is asserted **only for READ commands**.
 - Read data is latched internally before asserting `rsp_valid`.
 - If `rsp_ready = 0`, the controller **holds `rsp_valid` and `rsp_rdata` stable** until the host asserts `rsp_ready = 1`.
@@ -79,7 +78,7 @@ This interface directly connects the controller to an external SDR SDRAM device.
 | `sd_ras_n` | 1 | Out | Row Address Strobe (active low). |
 | `sd_cas_n` | 1 | Out | Column Address Strobe (active low). |
 | `sd_we_n`  | 1 | Out | Write Enable (active low). |
-| `sd_ba` | `BANK_BITS` | Out | Bank address. |
+| `sd_ba` | 2 | Out | Bank address. |
 | `sd_addr` | 13 | Out | Row/column address bus. Bit `A10` is used for **auto-precharge**. |
 | `sd_dq` | 16 | Inout | Bidirectional data bus. Driven by the controller during WRITE and sampled during READ. |
 | `sd_dqm` | 2 | Out | Data mask (fixed to `00` in this design). |
@@ -212,25 +211,3 @@ The SDRAM model includes:
 - Verify `rsp_valid` and `rsp_rdata` are held stable
 - Release `rsp_ready` and complete the transaction
 
----
-
-## 3. Intended Use
-
-This project is suitable for:
-- FPGA front-end RTL portfolio
-- Memory controller design practice
-- Verification and timing-aware FSM design exercises
-- Academic coursework and capstone projects
-
----
-
-## 4. Notes
-
-- Burst access, bank interleaving, and advanced scheduling are **not implemented**
-- Timing is simplified but SDRAM-correct for single-beat accesses
-- The design prioritizes **readability and correctness**
-
----
-
-## Author
-Developed as an RTL design and verification exercise for SDRAM controllers.
