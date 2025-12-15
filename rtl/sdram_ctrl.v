@@ -2,36 +2,32 @@
 `default_nettype none
 
 module sdram_ctrl #(
-    // Address configuration
     parameter ROW_BITS  = 13,
     parameter COL_BITS  = 9,
     parameter BANK_BITS = 2,
 
-    // Timing parameters (unit: SDRAM clock cycles)
-    parameter integer T_INIT_100US = 10000, // ~100us @100MHz
-    parameter integer T_RP         = 3,     // precharge time
-    parameter integer T_RCD        = 3,     // ACT ? READ/WRITE
-    parameter integer T_RFC        = 7,     // refresh cycle time
-    parameter integer T_MRD        = 2,     // mode register set
-    parameter integer T_WR         = 3,     // write recovery
-    parameter integer T_REF_INT    = 7800,  // refresh interval
-    parameter integer CL           = 3      // CAS latency (2 or 3)
+    parameter integer T_INIT_100US = 10000,
+    parameter integer T_RP         = 3,
+    parameter integer T_RCD        = 3,
+    parameter integer T_RFC        = 7,
+    parameter integer T_MRD        = 2,
+    parameter integer T_WR         = 3,
+    parameter integer T_REF_INT    = 7800,
+    parameter integer CL           = 3
 )(
     input  wire                                    clk,
     input  wire                                    rst_n,
 
-    // ---------- Host Command Interface ----------
     input  wire                                    cmd_valid,
     input  wire                                    cmd_write,
     input  wire [ROW_BITS+COL_BITS+BANK_BITS-1:0] cmd_addr,
     input  wire [15:0]                             cmd_wdata,
-    input  wire                                    rsp_ready,  // Host ready to accept data
+    input  wire                                    rsp_ready,
     output reg                                     cmd_ready,
 
     output reg                                     rsp_valid,
     output reg [15:0]                              rsp_rdata,
 
-    // ---------- SDRAM Interface ----------
     output wire                                    sd_clk,
     output reg                                     sd_cke,
     output reg                                     sd_cs_n,
@@ -43,7 +39,6 @@ module sdram_ctrl #(
     inout  wire [15:0]                             sd_dq,
     output reg [1:0]                               sd_dqm,
 
-    // ---------- Status/Debug Interface ----------
     output reg                                     error_flag,
     output reg [4:0]                               state_out
 );
@@ -53,7 +48,6 @@ module sdram_ctrl #(
     localparam TOT_ADDR  = ROW_BITS + COL_BITS + BANK_BITS;
     localparam NUM_BANKS = (1 << BANK_BITS);
 
-    // Command encoding {RAS,CAS,WE}
     localparam [2:0] CMD_NOP    = 3'b111;
     localparam [2:0] CMD_ACTIVE = 3'b011;
     localparam [2:0] CMD_READ   = 3'b101;
@@ -64,46 +58,28 @@ module sdram_ctrl #(
 
     reg [2:0] cmd_code;
 
-    // DQ tri-state
     reg [15:0] dq_out;
     reg        dq_oe;
 
     assign sd_dq = dq_oe ? dq_out : 16'hZZZZ;
 
-    // ---------- Host command pipeline (Stage 1) ----------
-    // *** FIX_STAGE2: ??ng ký l?i tín hi?u host ?? tránh race TB/DUT
     reg                   cmd_valid_r;
     reg                   cmd_write_r;
     reg [TOT_ADDR-1:0]    cmd_addr_r;
     reg [15:0]            cmd_wdata_r;
 
-    // Address decomposition cho command m?i t? host (?ã qua Stage 1)
-    // *** FIX_STAGE2: decode t? cmd_addr_r thay vì cmd_addr
-    wire [BANK_BITS-1:0] new_bank =
-        cmd_addr_r[BANK_BITS-1:0];
+    wire [BANK_BITS-1:0] new_bank = cmd_addr_r[BANK_BITS-1:0];
+    wire [COL_BITS-1:0] new_col = cmd_addr_r[BANK_BITS+COL_BITS-1 : BANK_BITS];
+    wire [ROW_BITS-1:0] new_row = cmd_addr_r[TOT_ADDR-1 : TOT_ADDR-ROW_BITS];
 
-    wire [COL_BITS-1:0] new_col =
-        cmd_addr_r[BANK_BITS+COL_BITS-1 : BANK_BITS];
-
-    wire [ROW_BITS-1:0] new_row =
-        cmd_addr_r[TOT_ADDR-1 : TOT_ADDR-ROW_BITS];
-
-    // Latch host command (Stage 2)
     reg                  cmd_write_q;
     reg [TOT_ADDR-1:0]   cmd_addr_q;
     reg [15:0]           cmd_wdata_q;
 
-    // Address decomposition cho command ?ang x? lý
-    wire [BANK_BITS-1:0] cur_bank =
-        cmd_addr_q[BANK_BITS-1:0];
+    wire [BANK_BITS-1:0] cur_bank = cmd_addr_q[BANK_BITS-1:0];
+    wire [COL_BITS-1:0] cur_col = cmd_addr_q[BANK_BITS+COL_BITS-1 : BANK_BITS];
+    wire [ROW_BITS-1:0] cur_row = cmd_addr_q[TOT_ADDR-1 : TOT_ADDR-ROW_BITS];
 
-    wire [COL_BITS-1:0] cur_col =
-        cmd_addr_q[BANK_BITS+COL_BITS-1 : BANK_BITS];
-
-    wire [ROW_BITS-1:0] cur_row =
-        cmd_addr_q[TOT_ADDR-1 : TOT_ADDR-ROW_BITS];
-
-    // FSM states
     localparam [4:0]
         S_RESET_START   = 5'd0,
         S_RESET_WAIT    = 5'd1,
@@ -131,7 +107,6 @@ module sdram_ctrl #(
 
     reg [4:0] state, next_state;
 
-    // Timer
     reg [15:0] timer;
     reg        timer_load;
     reg [15:0] timer_value;
@@ -148,7 +123,6 @@ module sdram_ctrl #(
         end
     end
 
-    // Refresh interval counter
     reg [31:0] ref_cnt;
     reg        refresh_pending;
 
@@ -157,7 +131,6 @@ module sdram_ctrl #(
             ref_cnt         <= 32'd0;
             refresh_pending <= 1'b0;
         end else begin
-            // Reset refresh counter during initialization
             if (state == S_RESET_START ||
                 state == S_RESET_WAIT  ||
                 state == S_INIT_PRE    ||
@@ -186,7 +159,6 @@ module sdram_ctrl #(
         end
     end
 
-    // Bank/Row active tracking
     reg [ROW_BITS-1:0]  active_row   [0:NUM_BANKS-1];
     reg [NUM_BANKS-1:0] bank_active;
     integer i;
@@ -197,13 +169,11 @@ module sdram_ctrl #(
             for (i = 0; i < NUM_BANKS; i = i + 1)
                 active_row[i] <= {ROW_BITS{1'b0}};
         end else begin
-            // Mark row active when ACT WAIT done
             if (state == S_ACT_WAIT && timer_done) begin
                 bank_active[cur_bank] <= 1'b1;
                 active_row[cur_bank]  <= cur_row;
             end
 
-            // Clear flag when auto-precharge completes
             if ((state == S_READ_RECOV  && timer_done) ||
                 (state == S_WRITE_RECOV && timer_done)) begin
                 bank_active[cur_bank] <= 1'b0;
@@ -211,7 +181,6 @@ module sdram_ctrl #(
         end
     end
 
-    // *** FIX_STAGE2: Stage 1 - sample tín hi?u host
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             cmd_valid_r  <= 1'b0;
@@ -226,8 +195,6 @@ module sdram_ctrl #(
         end
     end
 
-    // Latch host command (Stage 2)
-    // *** FIX_STAGE2: ch? latch ? IDLE, dùng giá tr? ?ã register
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             cmd_write_q  <= 1'b0;
@@ -242,7 +209,6 @@ module sdram_ctrl #(
         end
     end
 
-    // State register
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             state <= S_RESET_START;
@@ -251,7 +217,6 @@ module sdram_ctrl #(
         end
     end
 
-    // Read data latch with hold capability
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             rsp_rdata <= 16'd0;
@@ -270,7 +235,6 @@ module sdram_ctrl #(
         end
     end
 
-    // Error detection
     reg [15:0] idle_timeout;
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -290,7 +254,6 @@ module sdram_ctrl #(
         end
     end
 
-    // Debug: output current state
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n)
             state_out <= S_RESET_START;
@@ -298,7 +261,6 @@ module sdram_ctrl #(
             state_out <= state;
     end
 
-    // ---------- Combinational FSM + SDRAM signals ----------
     always @(*) begin
         next_state  = state;
         cmd_code    = CMD_NOP;
@@ -318,7 +280,6 @@ module sdram_ctrl #(
         timer_value = 16'd0;
 
         case (state)
-            // ========== INITIALIZATION SEQUENCE ==========
             S_RESET_START: begin
                 sd_cke      = 1'b0;
                 cmd_code    = CMD_NOP;
@@ -338,7 +299,7 @@ module sdram_ctrl #(
             S_INIT_PRE: begin
                 sd_cke      = 1'b1;
                 cmd_code    = CMD_PRECH;
-                sd_addr[10] = 1'b1;  // precharge all
+                sd_addr[10] = 1'b1;
                 timer_load  = 1'b1;
                 timer_value = T_RP[15:0];
                 next_state  = S_INIT_PRE_WAIT;
@@ -394,16 +355,14 @@ module sdram_ctrl #(
                 end
             end
 
-            // ========== IDLE + REFRESH ==========
             S_IDLE: begin
                 cmd_code  = CMD_NOP;
                 cmd_ready = (!refresh_pending);
 
                 if (refresh_pending) begin
                     next_state = S_REFRESH_CMD;
-                end else if (cmd_valid_r && cmd_ready) begin   // *** FIX_STAGE2: dùng cmd_valid_r
+                end else if (cmd_valid_r && cmd_ready) begin
                     if (bank_active[new_bank] && active_row[new_bank] == new_row) begin
-                        // *** FIX_STAGE2: dùng cmd_write_r ?? ch?n RW khi row-hit
                         if (cmd_write_r)
                             next_state = S_WRITE_CMD;
                         else
@@ -433,7 +392,6 @@ module sdram_ctrl #(
                 end
             end
 
-            // ========== READ/WRITE SEQUENCE ==========
             S_ACT_WAIT: begin
                 cmd_code = CMD_NOP;
                 if (timer_done) begin
@@ -448,7 +406,7 @@ module sdram_ctrl #(
                 cmd_code  = CMD_READ;
                 sd_ba     = cur_bank;
                 sd_addr[COL_BITS-1:0] = cur_col;
-                sd_addr[10]           = 1'b1;  // auto-precharge
+                sd_addr[10]           = 1'b1;
 
                 timer_load  = 1'b1;
                 timer_value = (CL >= 2) ? CL[15:0] : 16'd2;

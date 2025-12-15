@@ -5,7 +5,6 @@ module sdram_model #(
     parameter ROW_BITS  = 13,
     parameter COL_BITS  = 9,
     parameter BANK_BITS = 2,
-    // *** CL_FIX: thêm tham s? CAS latency (s? chu k? clock)
     parameter integer CL_CYCLES = 3
 )(
     input  wire                   clk,
@@ -20,7 +19,6 @@ module sdram_model #(
     input  wire [1:0]             dqm
 );
 
-    // Command encoding
     localparam [2:0]
         CMD_NOP    = 3'b111,
         CMD_ACTIVE = 3'b011,
@@ -32,7 +30,6 @@ module sdram_model #(
 
     wire [2:0] cmd = {ras_n, cas_n, we_n};
 
-    // Gi?m kích th??c RAM cho mô ph?ng
     localparam SIM_BANKS = 4;
     localparam SIM_ROWS  = 256;
     localparam SIM_COLS  = 256;
@@ -40,17 +37,14 @@ module sdram_model #(
 
     reg [15:0] mem [0:SIM_DEPTH-1];
 
-    // Row ?ang open cho m?i bank
     reg [ROW_BITS-1:0] open_row [0:SIM_BANKS-1];
     reg                row_open [0:SIM_BANKS-1];
 
-    // Tri-state DQ
     reg [15:0] dq_out;
     reg        dq_oe;
 
     assign dq = dq_oe ? dq_out : 16'hZZZZ;
 
-    // Hàm tính ??a ch? linear t? (bank,row,col)
     function integer linear_addr;
         input integer bank_i;
         input integer row_i;
@@ -63,10 +57,9 @@ module sdram_model #(
     integer i;
     integer bank_i, row_i, col_i, idx;
 
-    // *** CL_FIX: pipeline cho READ v?i CAS latency
-    reg        rd_pending;        // ?ang ch? tr? data cho m?t l?nh READ
-    integer    rd_cnt;            // b? ??m CL
-    integer    rd_bank, rd_row, rd_col;  // ??a ch? latch l?i t?i l?nh READ
+    reg        rd_pending;
+    integer    rd_cnt;
+    integer    rd_bank, rd_row, rd_col;
 
     initial begin
         for (i = 0; i < SIM_DEPTH; i = i + 1)
@@ -87,47 +80,40 @@ module sdram_model #(
     end
 
     always @(posedge clk) begin
-        // N?u chip không enable thì tri-state và clear pending
         if (cs_n || !cke) begin
             dq_oe      <= 1'b0;
-            rd_pending <= 1'b0;   // *** CL_FIX: h?y m?i READ ?ang ch?
+            rd_pending <= 1'b0;
             rd_cnt     <= 0;
         end else begin
-            // ---------- X? lý command ----------
             case (cmd)
                 CMD_ACTIVE: begin
                     if (ba < SIM_BANKS) begin
                         open_row[ba] <= addr[ROW_BITS-1:0];
                         row_open[ba] <= 1'b1;
                     end
-                    // Khi ACT row m?i thì ch?c ch?n không lái DQ
                     dq_oe <= 1'b0;
                 end
 
                 CMD_READ: begin
                     if (ba < SIM_BANKS && row_open[ba]) begin
-                        // *** CL_FIX: Latch thông tin READ, KHÔNG lái dq ngay
                         bank_i = ba;
                         row_i  = open_row[ba];
                         col_i  = addr[COL_BITS-1:0];
 
-                        // Gi?i h?n vào vùng mô ph?ng
                         row_i = row_i % SIM_ROWS;
                         col_i = col_i % SIM_COLS;
 
                         rd_bank    <= bank_i;
                         rd_row     <= row_i;
                         rd_col     <= col_i;
-                        rd_cnt     <= CL_CYCLES; // ??m CL chu k?
+                        rd_cnt     <= CL_CYCLES;
                         rd_pending <= 1'b1;
-                        dq_oe      <= 1'b0;      // CH?A lái bus ngay
+                        dq_oe      <= 1'b0;
 
-                        // H? tr? auto-precharge (A10=1)
                         if (addr[10]) begin
                             row_open[ba] <= 1'b0;
                         end
                     end else begin
-                        // N?u row ch?a open thì không lái gì, không pending
                         rd_pending <= 1'b0;
                         rd_cnt     <= 0;
                         dq_oe      <= 1'b0;
@@ -135,7 +121,6 @@ module sdram_model #(
                 end
 
                 CMD_WRITE: begin
-                    // ??m b?o model KHÔNG lái bus khi ?ang ghi
                     dq_oe <= 1'b0;
 
                     if (ba < SIM_BANKS && row_open[ba]) begin
@@ -143,23 +128,19 @@ module sdram_model #(
                         row_i  = open_row[ba];
                         col_i  = addr[COL_BITS-1:0];
 
-                        // Gi?i h?n vào vùng mô ph?ng
                         row_i = row_i % SIM_ROWS;
                         col_i = col_i % SIM_COLS;
 
                         idx       = linear_addr(bank_i, row_i, col_i);
-                        mem[idx] <= dq;   // ??c data t? controller
+                        mem[idx] <= dq;
 
-                        // auto-precharge cho WRITE n?u A10=1
                         if (addr[10]) begin
                             row_open[ba] <= 1'b0;
                         end
                     end
-                    // WRITE không liên quan t?i rd_pending, ?? nguyên rd_pending/rd_cnt
                 end
 
                 CMD_PRECH: begin
-                    // A10=1 -> precharge all
                     if (addr[10]) begin
                         for (i = 0; i < SIM_BANKS; i = i + 1)
                             row_open[i] <= 1'b0;
@@ -167,45 +148,31 @@ module sdram_model #(
                         if (ba < SIM_BANKS)
                             row_open[ba] <= 1'b0;
                     end
-                    // Khi precharge, thôi không lái DQ n?a
-                    dq_oe      <= 1'b0;
-                    // *** CL_FIX: có th? h?y READ pending n?u mu?n ch?t ch?
-                    // rd_pending <= 1'b0;
-                    // rd_cnt     <= 0;
+                    dq_oe <= 1'b0;
                 end
 
                 CMD_REF: begin
-                    // Không làm gì, ch? gi? l?p refresh; c?ng không lái DQ
                     dq_oe <= 1'b0;
-                    // *** CL_FIX: không ??ng t?i rd_pending, coi nh? DRAM gi? d? li?u n?i
                 end
 
                 CMD_MRS: begin
-                    // Không dùng trong model ??n gi?n; không lái DQ
-                    dq_oe      <= 1'b0;
-                    // Không thay ??i rd_pending
+                    dq_oe <= 1'b0;
                 end
 
                 default: begin
-                    // NOP: gi? nguyên dq_oe, dq_out
-                    // -> cho phép data gi? nguyên sau READ trong các chu k? NOP
                 end
             endcase
 
-            // ---------- Pipeline READ v?i CAS latency ----------
             if (rd_pending) begin
                 if (rd_cnt > 0) begin
                     rd_cnt <= rd_cnt - 1;
-                    // Khi v?a ??m xong (rd_cnt == 1 tr??c ?ó), cycle này tr? data
                     if (rd_cnt == 1) begin
-                        // Tính index t? rd_bank/rd_row/rd_col ?ã latch
                         row_i = rd_row % SIM_ROWS;
                         col_i = rd_col % SIM_COLS;
                         idx   = linear_addr(rd_bank, row_i, col_i);
 
                         dq_out <= mem[idx];
-                        dq_oe  <= 1'b1;   // b?t ??u lái data lên bus
-                        // rd_pending v?n =1, dq_oe gi? t?i khi command khác clear
+                        dq_oe  <= 1'b1;
                     end
                 end
             end

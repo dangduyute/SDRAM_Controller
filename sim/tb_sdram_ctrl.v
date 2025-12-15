@@ -3,20 +3,16 @@
 
 module tb_sdram_ctrl ();
 
-    // Parameters
     parameter ROW_BITS  = 13;
     parameter COL_BITS  = 9;
     parameter BANK_BITS = 2;
-    parameter CLK_PERIOD = 10; // 100MHz
+    parameter CLK_PERIOD = 10;
 
-    // State codes
     localparam [4:0] S_IDLE_TB = 5'd10;
 
-    // Clock & Reset
     reg clk;
     reg rst_n;
 
-    // Host interface
     reg                   cmd_valid;
     reg                   cmd_write;
     reg [ROW_BITS+COL_BITS+BANK_BITS-1:0] cmd_addr;
@@ -27,7 +23,6 @@ module tb_sdram_ctrl ();
     wire [15:0]           rsp_rdata;
     reg                   rsp_ready;
 
-    // SDRAM interface
     wire                  sd_clk;
     wire                  sd_cke;
     wire                  sd_cs_n;
@@ -39,20 +34,16 @@ module tb_sdram_ctrl ();
     wire [15:0]           sd_dq;
     wire [1:0]            sd_dqm;
 
-    // Debug from DUT
     wire                  error_flag;
     wire [4:0]            state_out;
 
-    // Test variables
     integer test_count = 0;
     integer pass_count = 0;
     integer fail_count = 0;
 
-    // *** TIMING_FIX: dùng ?? ?o th?i gian t? READ trên bus SDRAM t?i data
     time    read_cmd_bus_time;
     reg     measure_read_timing;
 
-    // Instantiate DUT
     sdram_ctrl #(
         .ROW_BITS    (ROW_BITS),
         .COL_BITS    (COL_BITS),
@@ -63,22 +54,19 @@ module tb_sdram_ctrl ();
         .T_RFC       (7),
         .T_MRD       (2),
         .T_WR        (3),
-        .T_REF_INT   (32'h7FFFFFFF),  // g?n nh? không refresh trong th?i gian mô ph?ng
+        .T_REF_INT   (32'h7FFFFFFF),
         .CL          (3)
     ) dut (
         .clk        (clk),
         .rst_n      (rst_n),
-
         .cmd_valid  (cmd_valid),
         .cmd_write  (cmd_write),
         .cmd_addr   (cmd_addr),
         .cmd_wdata  (cmd_wdata),
         .rsp_ready  (rsp_ready),
         .cmd_ready  (cmd_ready),
-
         .rsp_valid  (rsp_valid),
         .rsp_rdata  (rsp_rdata),
-
         .sd_clk     (sd_clk),
         .sd_cke     (sd_cke),
         .sd_cs_n    (sd_cs_n),
@@ -89,12 +77,10 @@ module tb_sdram_ctrl ();
         .sd_addr    (sd_addr),
         .sd_dq      (sd_dq),
         .sd_dqm     (sd_dqm),
-
         .error_flag (error_flag),
         .state_out  (state_out)
     );
 
-    // SDRAM model v?i CL n?i b? (b?n ?ang dùng b?n ?ã s?a tr??c ?ó)
     sdram_model #(
         .ROW_BITS (ROW_BITS),
         .COL_BITS (COL_BITS),
@@ -113,21 +99,18 @@ module tb_sdram_ctrl ();
         .dqm   (sd_dqm)
     );
 
-    // Clock generation
     initial begin
         clk = 1'b0;
         forever #(CLK_PERIOD/2) clk = ~clk;
     end
 
-    // Reset sequence
     initial begin
         rst_n = 1'b0;
-        measure_read_timing = 1'b0;   // *** TIMING_FIX: init
+        measure_read_timing = 1'b0;
         #(10*CLK_PERIOD);
         rst_n = 1'b1;
     end
 
-    // Main test sequence
     initial begin
         cmd_valid = 1'b0;
         cmd_write = 1'b0;
@@ -136,12 +119,12 @@ module tb_sdram_ctrl ();
         rsp_ready = 1'b1;
 
         wait(state_out == S_IDLE_TB);
-        #(100);  // Small delay after init
+        #(100);
         
-        $display("\n??????????????????????????????????????????");
-        $display("?  SDRAM Controller Test Suite Started  ?");
-        $display("?  Initialization complete              ?");
-        $display("??????????????????????????????????????????\n");
+        $display("\n__________________________________________");
+        $display("|  SDRAM Controller Test Suite Started  |");
+        $display("|  Initialization complete              |");
+        $display("__________________________________________\n");
 
         test_write_read_single();
         #(100);
@@ -162,20 +145,18 @@ module tb_sdram_ctrl ();
         $finish;
     end
 
-    // ===================== Tests =====================
-
     task test_write_read_single();
         reg [15:0] write_val, read_val;
         reg [23:0] test_addr;
         begin
             $display("\n[TEST 1] Single WRITE & READ");
-            $display("????????????????????????????????????");
+            $display("------------------------------------------");
             
             test_addr = 24'h123456;
             write_val = 16'hABCD;
             
             write_operation(write_val, test_addr);
-            #(50);  // Small delay between write and read
+            #(50);
             read_operation(test_addr, read_val);
             
             if (read_val == write_val) begin
@@ -195,7 +176,7 @@ module tb_sdram_ctrl ();
         reg [23:0] addr;
         begin
             $display("\n[TEST 2] Multiple Sequential Writes");
-            $display("????????????????????????????????????");
+            $display("------------------------------------------");
 
             for (i = 0; i < 4; i = i + 1) begin
                 addr = 24'h200000 + i;
@@ -216,7 +197,7 @@ module tb_sdram_ctrl ();
         reg [23:0] addr;
         begin
             $display("\n[TEST 3] Multiple Sequential Reads");
-            $display("????????????????????????????????????");
+            $display("------------------------------------------");
 
             for (i = 0; i < 4; i = i + 1) begin
                 addr = 24'h200000 + i;
@@ -236,7 +217,7 @@ module tb_sdram_ctrl ();
         reg [23:0] addr;
         begin
             $display("\n[TEST 4] Different Bank Access");
-            $display("????????????????????????????????????");
+            $display("------------------------------------------");
 
             for (b = 0; b < 4; b = b + 1) begin
                 addr = 24'hABCD00 | b;
@@ -246,7 +227,6 @@ module tb_sdram_ctrl ();
                 $display("  Bank %0d: Write 0x%04x to 0x%06x", b, data, addr);
             end
 
-            // Read back and verify data per bank
             for (b = 0; b < 4; b = b + 1) begin
                 addr = 24'hABCD00 | b;
                 read_operation(addr, read_val);
@@ -260,7 +240,6 @@ module tb_sdram_ctrl ();
         end
     endtask
 
-    // *** TIMING_FIX: s?a Test 5 ?? ?o t? READ trên bus SDRAM ??n data
     task test_cas_latency_timing();
         reg [15:0] data, read_val;
         reg [23:0] addr;
@@ -270,24 +249,19 @@ module tb_sdram_ctrl ();
         integer timeout_cnt;
         begin
             $display("\n[TEST 5] CAS Latency Timing Verification");
-            $display("????????????????????????????????????");
+            $display("------------------------------------------");
 
             addr = 24'h300000;
             data = 16'hCAFE;
 
-            // First write the test data
             write_operation(data, addr);
-            #(100);  // Small delay after write
-
-            // B?t c? ?? monitor l?u th?i ?i?m READ trên bus
+            #(100);
             measure_read_timing = 1'b1;
-
-            // Now read it back
             wait(state_out == S_IDLE_TB);
             @(posedge clk);
             
             cmd_valid = 1'b1;
-            cmd_write = 1'b0;  // READ operation
+            cmd_write = 1'b0;
             cmd_addr  = addr;
             $display("  [TB] READ request sent at host time %0t", $time);
 
@@ -295,14 +269,12 @@ module tb_sdram_ctrl ();
             @(posedge clk);
             cmd_valid = 1'b0;
 
-            // ??i rsp_valid v?i timeout
             timeout_cnt = 0;
             while (!rsp_valid && timeout_cnt < 500) begin
                 @(posedge clk);
                 timeout_cnt = timeout_cnt + 1;
             end
 
-            // T?t ?o ?? không ?nh h??ng test khác
             measure_read_timing = 1'b0;
 
             if (!rsp_valid) begin
@@ -313,10 +285,7 @@ module tb_sdram_ctrl ();
                 data_valid_time = $time;
                 read_val        = rsp_rdata;
                 
-                // Delay t? READ trên bus SDRAM t?i data valid
                 delay_measured = data_valid_time - read_cmd_bus_time;
-
-                // expected ? CL * Tclk (ch?a c?ng pipeline n?i)
                 expected_delay = (3 * CLK_PERIOD);
                 
                 $display("  [BUS] READ command on SDRAM at %0t", read_cmd_bus_time);
@@ -341,7 +310,7 @@ module tb_sdram_ctrl ();
         reg [23:0] addr1, addr2;
         begin
             $display("\n[TEST 6] Back-to-Back Write/Read");
-            $display("????????????????????????????????????");
+            $display("------------------------------------------");
 
             addr1 = 24'h400000;
             addr2 = 24'h400001;
@@ -369,91 +338,77 @@ module tb_sdram_ctrl ();
         end
     endtask
 
-    // New test for response hold time
-  task test_response_hold();
-    reg [15:0] write_val, read_val1, read_val2;
-    reg [23:0] addr;
-    integer timeout_cnt;
-    begin
-        $display("\n[TEST 7] Response Hold (Backpressure) Verification");
-        $display("????????????????????????????????????");
+    task test_response_hold();
+        reg [15:0] write_val, read_val1, read_val2;
+        reg [23:0] addr;
+        integer timeout_cnt;
+        begin
+            $display("\n[TEST 7] Response Hold (Backpressure) Verification");
+            $display("------------------------------------------");
 
-        addr      = 24'h500000;
-        write_val = 16'hDEAD;
+            addr      = 24'h500000;
+            write_val = 16'hDEAD;
 
-        // 1) Write tr??c
-        write_operation(write_val, addr);
-        #(100);
+            write_operation(write_val, addr);
+            #(100);
 
-        // 2) ??m b?o ?ang IDLE
-        wait(state_out == S_IDLE_TB);
-        @(posedge clk);
-
-        // 3) T?O BACKPRESSURE: host ch?a s?n sàng nh?n data
-        rsp_ready = 1'b0;
-
-        // 4) G?i READ
-        cmd_valid = 1'b1;
-        cmd_write = 1'b0;
-        cmd_addr  = addr;
-
-        wait(cmd_ready);
-        @(posedge clk);
-        cmd_valid = 1'b0;
-        cmd_write = 1'b0;
-        cmd_addr  = 24'd0;
-
-        // 5) Ch? rsp_valid lên (timeout)
-        timeout_cnt = 0;
-        while (!rsp_valid && timeout_cnt < 1000) begin
+            wait(state_out == S_IDLE_TB);
             @(posedge clk);
-            timeout_cnt = timeout_cnt + 1;
-        end
 
-        if (!rsp_valid) begin
-            $display("FAIL: rsp_valid timeout in TEST 7");
-            fail_count = fail_count + 1;
-        end else begin
-            // 6) Khi rsp_valid lên, sample data
-            read_val1 = rsp_rdata;
-            $display("  Sample#1 (rsp_ready=0): 0x%04x", read_val1);
+            rsp_ready = 1'b0;
 
-            // 7) Gi? backpressure vài chu k? và ki?m tra DUT có gi? valid+data không
-            repeat (3) begin
+            cmd_valid = 1'b1;
+            cmd_write = 1'b0;
+            cmd_addr  = addr;
+
+            wait(cmd_ready);
+            @(posedge clk);
+            cmd_valid = 1'b0;
+            cmd_write = 1'b0;
+            cmd_addr  = 24'd0;
+
+            timeout_cnt = 0;
+            while (!rsp_valid && timeout_cnt < 1000) begin
                 @(posedge clk);
-                if (!rsp_valid) begin
-                    $display("FAIL: rsp_valid was not held under backpressure!");
+                timeout_cnt = timeout_cnt + 1;
+            end
+
+            if (!rsp_valid) begin
+                $display("FAIL: rsp_valid timeout in TEST 7");
+                fail_count = fail_count + 1;
+            end else begin
+                read_val1 = rsp_rdata;
+                $display("  Sample#1 (rsp_ready=0): 0x%04x", read_val1);
+
+                repeat (3) begin
+                    @(posedge clk);
+                    if (!rsp_valid) begin
+                        $display("FAIL: rsp_valid was not held under backpressure!");
+                        fail_count = fail_count + 1;
+                        disable test_response_hold;
+                    end
+                end
+
+                read_val2 = rsp_rdata;
+                $display("  Sample#2 after hold     : 0x%04x", read_val2);
+
+                rsp_ready = 1'b1;
+                @(posedge clk);
+
+                if (read_val1 == write_val && read_val2 == write_val) begin
+                    $display("PASS: rsp_valid & rsp_rdata held correctly. Data=0x%04x", write_val);
+                    pass_count = pass_count + 1;
+                end else begin
+                    $display("FAIL: Data incorrect (sample1=0x%04x sample2=0x%04x expected=0x%04x)",
+                             read_val1, read_val2, write_val);
                     fail_count = fail_count + 1;
-                    disable test_response_hold;
                 end
             end
 
-            read_val2 = rsp_rdata;
-            $display("  Sample#2 after hold     : 0x%04x", read_val2);
-
-            // 8) Nh? ready ?? accept
             rsp_ready = 1'b1;
-            @(posedge clk); // accept on this cycle (rsp_valid & rsp_ready)
-
-            // 9) Check k?t qu?
-            if (read_val1 == write_val && read_val2 == write_val) begin
-                $display("PASS: rsp_valid & rsp_rdata held correctly. Data=0x%04x", write_val);
-                pass_count = pass_count + 1;
-            end else begin
-                $display("FAIL: Data incorrect (sample1=0x%04x sample2=0x%04x expected=0x%04x)",
-                         read_val1, read_val2, write_val);
-                fail_count = fail_count + 1;
-            end
+            test_count = test_count + 1;
         end
-
-        // tr? v? default
-        rsp_ready = 1'b1;
-        test_count = test_count + 1;
-    end
-endtask
-
-
-    // ================= Helper Tasks =================
+    endtask
 
     task write_operation(
         input [15:0] wdata,
@@ -475,7 +430,6 @@ endtask
             cmd_addr  = 24'd0;
             cmd_wdata = 16'd0;
 
-            // Wait for operation to complete (return to IDLE)
             wait(state_out == S_IDLE_TB);
         end
     endtask
@@ -490,7 +444,7 @@ endtask
             @(posedge clk);
             
             cmd_valid = 1'b1;
-            cmd_write = 1'b0;  // READ
+            cmd_write = 1'b0;
             cmd_addr  = addr;
 
             wait(cmd_ready);
@@ -499,7 +453,6 @@ endtask
             cmd_write = 1'b0;
             cmd_addr  = 24'd0;
 
-            // Wait for valid with timeout detection
             timeout_cnt = 0;
             while (!rsp_valid && timeout_cnt < 1000) begin
                 @(posedge clk);
@@ -518,34 +471,27 @@ endtask
 
     task print_test_summary();
         begin
-            $display("\n??????????????????????????????????????????");
-            $display("?         Test Summary Report           ?");
-            $display("??????????????????????????????????????????");
-            $display("?  Total Tests: %2d                      ?", test_count);
-            $display("?  Passed:      %2d                    ?", pass_count);
-            $display("?  Failed:      %2d                     ?", fail_count);
+            $display("\n_________________________________________");
+            $display("|         Test Summary Report           |");
+            $display("_________________________________________");
+            $display("|  Total Tests: %2d                      |", test_count);
+            $display("|  Passed:      %2d                      |", pass_count);
+            $display("|  Failed:      %2d                      |", fail_count);
             if (fail_count == 0)
-                $display("?  Result: ALL TESTS PASSED!          ?");
+                $display("|  Result: ALL TESTS PASSED!            |");
             else
-                $display("?  Result: SOME TESTS FAILED!         ?");
-            $display("??????????????????????????????????????????\n");
+                $display("|  Result: SOME TESTS FAILED!           |");
+            $display("_________________________________________\n");
         end
     endtask
 
-    // Monitor
-    initial begin
-        $dumpfile("sdram_sim.vcd");
-        $dumpvars(0, tb_sdram_ctrl);
-    end
 
-    // Command logging + timing hook
     always @(posedge clk) begin
         if (sd_cs_n == 1'b0) begin
             case ({sd_ras_n, sd_cas_n, sd_we_n})
                 3'b011: $display("[%0t] SDRAM_CMD: ACTIVE   | Bank=%0d, Row=0x%03x",
                                   $time, sd_ba, sd_addr[12:0]);
                 3'b101: begin
-                    // *** TIMING_FIX: ghi l?i th?i gian READ trên bus n?u ?ang ?o
                     if (measure_read_timing) begin
                         read_cmd_bus_time = $time;
                     end
@@ -563,14 +509,12 @@ endtask
         end
     end
 
-    // Response monitoring
     always @(posedge clk) begin
         if (rsp_valid) begin
             $display("[%0t] RESPONSE: rsp_valid=1, rsp_rdata=0x%04x", $time, rsp_rdata);
         end
     end
 
-    // Timeout protection
     initial begin
         #500000;
         $display("\n??  TIMEOUT: Simulation took too long!");
