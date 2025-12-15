@@ -1,7 +1,6 @@
 # SDRAM Controller – RTL & Testbench Verification
 
 This repository contains a **Verilog-based SDRAM controller**, a **behavioral SDRAM model**, and a **self-checking testbench**.  
-The project is intended for **RTL design practice**, **memory controller verification**, and **FPGA front-end portfolio projects**.
 
 ---
 
@@ -9,7 +8,7 @@ The project is intended for **RTL design practice**, **memory controller verific
 
 ### 1.1 Overview
 
-The RTL implements a **single-data-rate (SDR) SDRAM controller** with a **16-bit data bus**, based on a **finite state machine (FSM)** and parameterized timing control.
+The RTL implements a **single-data-rate SDRAM controller** with a **16-bit data bus**
 
 The design focuses on:
 - Correct SDRAM **initialization sequence**
@@ -23,42 +22,95 @@ All critical SDRAM timing parameters are configurable through Verilog parameters
 
 ---
 
-### 1.2 Interfaces
+## 1.2 Interfaces
 
-#### Host Command Interface
+This section describes all external interfaces of the SDRAM controller, including
+signal directions, functional roles, and handshake behavior.
 
-| Signal | Direction | Description |
-|------|-----------|-------------|
-| `cmd_valid` | In | Host asserts a valid command |
-| `cmd_write` | In | `1` = WRITE, `0` = READ |
-| `cmd_addr`  | In | Combined address (Bank + Column + Row) |
-| `cmd_wdata` | In | 16-bit write data |
-| `cmd_ready` | Out | Controller ready to accept a new command |
-| `rsp_valid` | Out | Read response is valid |
-| `rsp_rdata` | Out | 16-bit read data |
-| `rsp_ready` | In | Host ready to accept read data (backpressure) |
+---
 
-#### SDRAM Interface
+## Host Command Interface
 
-| Signal | Description |
-|------|-------------|
-| `sd_clk` | SDRAM clock |
-| `sd_cke` | Clock enable |
-| `sd_cs_n` | Chip select (active low) |
-| `sd_ras_n` | Row address strobe |
-| `sd_cas_n` | Column address strobe |
-| `sd_we_n` | Write enable |
-| `sd_ba` | Bank address |
-| `sd_addr` | Address bus (row/column + A10 auto-precharge) |
-| `sd_dq` | 16-bit bidirectional data bus |
-| `sd_dqm` | Data mask |
+The host interface provides a **simple request–response protocol** between a host
+processor/testbench and the SDRAM controller.
 
-#### Debug / Status
+#### Command Channel (Host → Controller)
 
-| Signal | Description |
-|------|-------------|
-| `state_out` | Current FSM state (for debug/verification) |
-| `error_flag` | Error/timeout indication |
+| Signal | Width | Direction | Description |
+|------|------:|:---------:|-------------|
+| `cmd_valid` | 1 | In | Asserted by the host to indicate a valid memory command. |
+| `cmd_write` | 1 | In | Command type: `1` = WRITE, `0` = READ. |
+| `cmd_addr`  | `ROW_BITS+COL_BITS+BANK_BITS` | In | Linear memory address, internally decoded into **bank**, **row**, and **column** fields. |
+| `cmd_wdata` | 16 | In | Write data for WRITE commands. |
+| `cmd_ready` | 1 | Out | Indicates that the controller can accept a new command in the current cycle. |
+
+**Handshake rule**
+- A command is accepted when **`cmd_valid && cmd_ready`** is high on a rising clock edge.
+- Commands are accepted **only in the `IDLE` state** and when no refresh operation is pending.
+- Input signals are internally registered to avoid race conditions between host and controller.
+
+---
+
+#### Response Channel (Controller → Host)
+
+| Signal | Width | Direction | Description |
+|------|------:|:---------:|-------------|
+| `rsp_valid` | 1 | Out | Asserted when read data is valid. |
+| `rsp_rdata` | 16 | Out | Read data returned from SDRAM. |
+| `rsp_ready` | 1 | In | Asserted by the host to accept the read response (backpressure support). |
+
+**Response behavior**
+- `rsp_valid` is asserted **only for READ commands**.
+- Read data is latched internally before asserting `rsp_valid`.
+- If `rsp_ready = 0`, the controller **holds `rsp_valid` and `rsp_rdata` stable** until the host asserts `rsp_ready = 1`.
+- The read transaction completes when **`rsp_valid && rsp_ready`** is observed on a rising clock edge.
+
+This mechanism allows the host to stall the controller if it is temporarily unable
+to accept read data.
+
+---
+
+## SDRAM Device Interface
+
+This interface directly connects the controller to an external SDR SDRAM device.
+
+| Signal | Width | Direction | Description |
+|------|------:|:---------:|-------------|
+| `sd_clk` | 1 | Out | SDRAM clock (directly driven by the controller clock). |
+| `sd_cke` | 1 | Out | Clock enable for SDRAM. |
+| `sd_cs_n` | 1 | Out | Chip select (active low). |
+| `sd_ras_n` | 1 | Out | Row Address Strobe (active low). |
+| `sd_cas_n` | 1 | Out | Column Address Strobe (active low). |
+| `sd_we_n`  | 1 | Out | Write Enable (active low). |
+| `sd_ba` | `BANK_BITS` | Out | Bank address. |
+| `sd_addr` | 13 | Out | Row/column address bus. Bit `A10` is used for **auto-precharge**. |
+| `sd_dq` | 16 | Inout | Bidirectional data bus. Driven by the controller during WRITE and sampled during READ. |
+| `sd_dqm` | 2 | Out | Data mask (fixed to `00` in this design). |
+
+**SDRAM command encoding**
+The controller generates SDRAM commands using `{RAS_n, CAS_n, WE_n}`:
+- `ACTIVE`, `READ`, `WRITE`, `PRECHARGE`, `REFRESH`, `MODE REGISTER SET`, and `NOP`.
+
+**Data bus control**
+- During WRITE operations, the controller drives `sd_dq` and asserts internal output-enable.
+- During READ operations, `sd_dq` is tri-stated by the controller and sampled after CAS latency.
+- At all other times, the bus remains in high-impedance state.
+
+---
+
+## Debug and Status Interface
+
+These signals are provided for **verification and debugging** purposes.
+
+| Signal | Width | Direction | Description |
+|------|------:|:---------:|-------------|
+| `state_out` | 5 | Out | Encodes the current FSM state of the controller. |
+| `error_flag` | 1 | Out | Indicates abnormal conditions such as timeouts or illegal states. |
+
+`state_out` is primarily used by the testbench to:
+- Detect when the controller returns to `IDLE`
+- Synchronize test sequences
+- Diagnose incorrect FSM transitions
 
 ---
 
@@ -123,8 +175,6 @@ After reset, the controller performs the standard SDRAM initialization flow:
 The testbench verifies the controller using:
 - A cycle-accurate **behavioral SDRAM model** (`sdram_model.v`)
 - Self-checking test cases
-- Automatic waveform generation (XSIM/WDB or VCD)
-- Time-outs to detect deadlocks
 
 The SDRAM model includes:
 - Bank/row tracking
