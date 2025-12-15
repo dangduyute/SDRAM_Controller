@@ -29,12 +29,12 @@ signal directions, functional roles, and handshake behavior.
 
 ---
 
-## Host Command Interface
+#### A) Host Command Interface
 
 The host interface provides a **simple request–response protocol** between a host
 processor/testbench and the SDRAM controller.
 
-#### Command Channel (Host → Controller)
+##### Command Channel (Host → Controller)
 
 | Signal | Width | Direction | Description |
 |------|------:|:---------:|-------------|
@@ -51,7 +51,7 @@ processor/testbench and the SDRAM controller.
 
 ---
 
-#### Response Channel (Controller → Host)
+##### Response Channel (Controller → Host)
 
 | Signal | Width | Direction | Description |
 |------|------:|:---------:|-------------|
@@ -70,7 +70,7 @@ to accept read data.
 
 ---
 
-## SDRAM Device Interface
+#### B) SDRAM Device Interface
 
 This interface directly connects the controller to an external SDR SDRAM device.
 
@@ -98,7 +98,7 @@ The controller generates SDRAM commands using `{RAS_n, CAS_n, WE_n}`:
 
 ---
 
-## Debug and Status Interface
+#### D) Debug and Status Interface
 
 These signals are provided for **verification and debugging** purposes.
 
