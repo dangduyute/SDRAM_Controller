@@ -27,7 +27,6 @@ All critical SDRAM timing parameters are configurable through Verilog parameters
 This section describes all external interfaces of the SDRAM controller, including
 signal directions, functional roles, and handshake behavior.
 
----
 
 #### A) Host Command Interface
 
@@ -49,7 +48,6 @@ processor/testbench and the SDRAM controller.
 - Commands are accepted **only in the `IDLE` state** and when no refresh operation is pending.
 - Input signals are internally registered to avoid race conditions between host and controller.
 
----
 
 ##### Response Channel (Controller → Host)
 
@@ -68,7 +66,6 @@ processor/testbench and the SDRAM controller.
 This mechanism allows the host to stall the controller if it is temporarily unable
 to accept read data.
 
----
 
 #### B) SDRAM Device Interface
 
@@ -96,7 +93,6 @@ The controller generates SDRAM commands using `{RAS_n, CAS_n, WE_n}`:
 - During READ operations, `sd_dq` is tri-stated by the controller and sampled after CAS latency.
 - At all other times, the bus remains in high-impedance state.
 
----
 
 #### D) Debug and Status Interface
 
