@@ -66,9 +66,9 @@ This mechanism allows the host to stall the controller if it is temporarily unab
 to accept read data.
 
 
-#### B) SDRAM Device Interface
+#### B) SDRAM Interface
 
-This interface directly connects the controller to an external SDR SDRAM device.
+This interface directly connects the controller to an external SDRAM.
 
 | Signal | Width | I/O | Description |
 |------|------:|:---------:|-------------|
