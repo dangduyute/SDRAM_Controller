@@ -34,7 +34,7 @@ The host interface provides a **simple request–response protocol** between a p
 
 ##### Command Channel (Host → Controller)
 
-| Signal | Width | Direction | Description |
+| Signal | Width | I/O | Description |
 |------|------:|:---------:|-------------|
 | `cmd_valid` | 1 | In | Asserted by the host to indicate a valid memory command. |
 | `cmd_write` | 1 | In | Command type: `1` = WRITE, `0` = READ. |
@@ -50,7 +50,7 @@ The host interface provides a **simple request–response protocol** between a p
 
 ##### Response Channel (Controller → Host)
 
-| Signal | Width | Direction | Description |
+| Signal | Width | I/O | Description |
 |------|------:|:---------:|-------------|
 | `rsp_valid` | 1 | Out | Asserted when read data is valid. |
 | `rsp_rdata` | 16 | Out | Read data returned from SDRAM. |
@@ -70,7 +70,7 @@ to accept read data.
 
 This interface directly connects the controller to an external SDR SDRAM device.
 
-| Signal | Width | Direction | Description |
+| Signal | Width | I/O | Description |
 |------|------:|:---------:|-------------|
 | `sd_clk` | 1 | Out | SDRAM clock (directly driven by the controller clock). |
 | `sd_cke` | 1 | Out | Clock enable for SDRAM. |
@@ -97,7 +97,7 @@ The controller generates SDRAM commands using `{RAS_n, CAS_n, WE_n}`:
 
 These signals are provided for **verification and debugging** purposes.
 
-| Signal | Width | Direction | Description |
+| Signal | Width | I/O | Description |
 |------|------:|:---------:|-------------|
 | `state_out` | 5 | Out | Encodes the current FSM state of the controller. |
 | `error_flag` | 1 | Out | Indicates abnormal conditions such as timeouts or illegal states. |
